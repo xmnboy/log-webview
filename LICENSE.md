@@ -28,6 +28,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----
 
 Portions Copyright (c) 2015, Craig Patik <http://patik.com> 
+
 See https://github.com/patik/console.log-wrapper for original version.
 
 Permission to use, copy, modify, and/or distribute this software for any 
