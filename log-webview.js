@@ -7,15 +7,15 @@
 // This file is optional.
 // It has no external dependencies.
 // Best to include it early in your index.html file for maximum benefit.
-// It is only needed if you wish to use the window.log() function defined within.
+// It is only needed if you wish to use the window.log() functions defined within.
 
 /*jslint browser:true, devel:true, white:true, vars:true */
-/*global module:true, define:true */
+/*global module:true, define:true, performance:true */
 
 
 
 // AMD support
-// ;paf; can probably eliminate this, as well, since limiting to use in a webview
+// ;paf; can probably eliminate this, since limiting to use in a webview
 (function (root, name, factory) {
     if( typeof module !== "undefined" ) {
         module.exports = factory() ;
@@ -44,10 +44,24 @@ function _log() {
         return false ;
     }()) ;
 
+    var timeStart = Date.now() ;        // feeble zero ref for relative time, in ms
+    var timeStampRel = (function() {
+        if( window.performance && performance.now ) {
+            return (function() { return performance.now().toFixed(3) ; }) ;
+        }
+        else {
+            return (function() { return (Date.now()-timeStart) ; }) ;
+        }
+    }()) ;
+    var timeStampAbs = (function() {
+        return (function() { return Date() ; }) ;
+    }()) ;
+
+
 /*
  * Define the log() function.
  * Call it just like console.log() function.
- * Will create a stack of logs that can be retreived for later inspection.
+ * Will create a stack of logs that can be popped for later inspection.
  * Prepends filename:line:column info to log (when available).
  * Prepends date/time info to log (when available).
  */
@@ -55,18 +69,26 @@ function _log() {
     log = function() {
         var i, err ;
         var args = arguments ;
-        var sliced = Array.prototype.slice.call(args) ;     // convert "arguments" to an array
+        var sliced = Array.prototype.slice.call(args) ; // convert "arguments" to an array
 
-        err = new Error() ;                         // add filename:line:column info (does not work with IE10 or IE11)
-        if( err.fileName && err.lineNumber ) {      // Firefox
-            sliced.unshift("@" + err.fileName.substr(err.fileName.lastIndexOf("/") + 1) + ":" + err.lineNumber + ":1") ;
+        if( log.options.lineNumber ) {
+            err = new Error() ;                         // add filename:line:column info (does not work with IE10 or IE11)
+            if( err.fileName && err.lineNumber ) {      // Firefox
+                sliced.unshift("@" + err.fileName.substr(err.fileName.lastIndexOf("/") + 1) + ":" + err.lineNumber + ":1") ;
+            }
+            else if( err.stack ) {                      // Chrome/WebKit/Edge
+                sliced.unshift(log.getLineFromStack(err.stack)) ;
+            }
         }
-        else if( err.stack ) {                      // Chrome/WebKit/Edge
-            sliced.unshift(log.getLineFromStack(err.stack)) ;
+        if( log.options.timeStamp ) {
+            if( log.options.timeRelative )
+                sliced.unshift(timeStampRel()) ;
+            else
+                sliced.unshift(timeStampAbs()) ;
         }
 
         log.history.push(sliced) ;      // push log arguments for later inspection
-        log.console(sliced) ;           //
+        log.console(sliced) ;           // and print to live console
     } ;
 
     log.history = [] ;                  // for maintaining a history of all logs
@@ -79,7 +101,9 @@ function _log() {
  * need to add an option to control printing to a redirected console...
  */
     log.options = {                     // default logging options
-        lineNumber: true,               // true adds filename, line number and column number to log
+        timeStamp: true,                // true prepends time of log() to the logged array
+        timeRelative: false,            // true means prepend relative time to the logged array
+        lineNumber: true,               // true prepends filename, line number and column number to log
         consoleLog: false               // true means send to console.log() after pushing to log.history
     } ;
 
