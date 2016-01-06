@@ -167,9 +167,12 @@ function _log() {
  * This function is meant to be used interactively by the developer at the console.
  *
  * It will print:
+ *
  * - the full list of pushed logs for empty arg, log.print()
  * - the specified log element if one numeric arg is provided, log.print(3)
  * - the range of log elements if two numeric args are provided, log.print(5,9)
+ *
+ * start and stop are zero-based (first log element is at location 0)
  */
     log.print = function(start,stop) {
         var i ;
@@ -196,13 +199,59 @@ function _log() {
         if( stop>log.history.length ) {     // too large stop parameter, stop at last element
             stop = log.history.length ;
         }
-// TODO: iterate from start thru stop and call log.console() each time
-// don't forget to test for empty history array...
 
         for( i=start; i<=stop; i++ )
             log.console(log.history[i]) ;   // print out history per input parms
 
-        return i ;                          // return number of array elements printed to console
+        return stop-start+1 ;               // return number of array elements printed to console
+    } ;
+
+
+/*
+ * Use at debug console to delete log results.
+ * This function is meant to be used interactively by the developer at the console.
+ *
+ * It will delete:
+ *
+ * - the full list of pushed logs for empty arg, log.print()
+ * - the specified log element if one numeric arg is provided, log.print(3)
+ * - the range of log elements if two numeric args are provided, log.print(5,9)
+ *
+ * start and stop are zero-based (first log element is at location 0)
+ */
+    log.delete = function(start,stop) {
+        var i ;
+
+        if( typeof log.history==="undefined" || log.history===null || log.history.length<=0 )
+            return 0 ;
+
+        if( start === undefined ) {         // no parameters provided, print entire history
+            start = 0 ;
+            stop = log.history.length ;
+        }
+        if( stop === undefined ) {          // only start provided, print single history element
+            stop = start ;
+        }
+        if( !Number.isInteger(start) ) {    // bad start parameter, assume starting with 0th element
+            start = 0 ;
+        }
+        if( !Number.isInteger(stop) ) {     // bad stop parameter, assume stopping with last element
+            stop = log.history.length ;
+        }
+        if( start<0 ) {                     // negative start parameter, start with zeroth element
+            start = 0 ;
+        }
+        if( stop>log.history.length ) {     // too large stop parameter, stop at last element
+            stop = log.history.length ;
+        }
+
+        console.info("Following log elements removed by log.delete():") ;
+        for( i=start; i<=stop; i++ ) {
+            log.console(log.history[i]) ;   // print out element to be deleted and...
+            log.history.splice(i,1) ;       // ...delete that element, one at a time...
+        }
+
+        return stop-start+1 ;               // return number of array elements deleted
     } ;
 
 
@@ -217,10 +266,11 @@ function _log() {
                 console.group(log.options.consoleLabel) ;
 //            }
 
-            if( argArray.length === 1 && typeof argArray[0] === "string" ) {    // if a single string argument
-                console.log(argArray.toString()) ;
-            }
-            else if( isIEModern ) {                         // IE 10/11 need `console.dir` to display objects usefully
+//            if( argArray.length === 1 && typeof argArray[0] === "string" ) {    // if a single string argument
+//                console.log(argArray.toString()) ;
+//            }
+//            else if( isIEModern ) {                         // IE 10/11 need `console.dir` to display objects usefully
+            if( isIEModern ) {                              // IE 10/11 need `console.dir` to display objects usefully
                 for( var i=0; i < argArray.length; i++ ) {  // loop through argument array to pick out objects
                     if( log.kind(argArray[i]) === "object" ) // plain object
                         console.dir(argArray[i]) ;
