@@ -34,15 +34,22 @@
 // note _log() is a continuation of AMD parameter list above
 function _log() {
     "use strict" ;
-    var log ;                           // the function of interest, defined later
+    var log = function() {} ;           // the function of interest, defined later
     var ua = navigator.userAgent ;
     var isIEModern = (function() {      // means IE10 or IE11, Edge behaves more like Chrome/Webkit
         var winRegexp = /Windows\sNT\s(\d+\.\d+)/ ;
-        if( typeof console !== "undefined" && console.log && /Trident/.test(ua) && winRegexp.test(ua) ) {
-            if (parseFloat(winRegexp.exec(ua)[1]) >= 6.2)   // Windows 8.0 or higher detected
-                return true ;
+        if( typeof console !== "undefined" && console.log && /Trident/.test(ua) ) {
+            if( winRegexp.test(ua) ) {
+                if( parseFloat(winRegexp.exec(ua)[1]) >= 6.2 )  // Windows 8.0 or higher detected
+                    return true ;
+            }
+            else {
+                if( /IEMobile/.test(ua) )                       // Windows Phone 8.x detected
+                    return true ;
+            }
         }
-        return false ;
+        else
+            return false ;
     }()) ;
 
     var timeStart = Date.now() ;        // feeble zero ref for relative time, in ms
@@ -68,6 +75,7 @@ function _log() {
 
 /*
  * Define the log() function.
+ * Must be defined first, before sub-methods and properties.
  * Call it just like calling console.log().
  * Creates a stack of log arrays that can be popped for later inspection.
  * Optionally prepends filename:line:column info to log (when available).
@@ -76,48 +84,69 @@ function _log() {
  */
 
     log = function() {
-        var i, err ;
-        var args = new Array(arguments.length) ;    // to prevent "leaked" arguments
-        for( i=0; i<args.length; ++i ) {            // see https://github.com/petkaantonov/bluebird/wiki/Optimization-killers#32-leaking-arguments
+        var i, x, err ;
+        var args = new Array(arguments.length) ;        // to prevent "leaked" arguments
+        for( i=0; i<args.length; ++i ) {                // see https://github.com/petkaantonov/bluebird/wiki/Optimization-killers#32-leaking-arguments
             args[i] = arguments[i] ;
         }
 
         if( log.options.lineNumber ) {
-            err = new Error() ;                         // add filename:line:column info (does not work with IE10 or IE11)
-            if( err.fileName && err.lineNumber ) {      // Firefox
-                args.unshift("@" + err.fileName.substr(err.fileName.lastIndexOf("/") + 1) + ":" + err.lineNumber + ":1") ;
-            }
-            else if( err.stack ) {                      // Chrome/WebKit/Edge
-                args.unshift(log.getLineFromStack(err.stack)) ;
-            }
-        }
-        if( log.options.timeStamp ) {
-            if( log.options.timeRelative )
-                args.unshift(timeStampRel()) ;
-            else
-                args.unshift(timeStampAbs()) ;
+            err = new Error() ;                         // add filename:line:column info
+            if( err.fileName && err.lineNumber )        // Firefox
+                x = "@" + err.fileName.substr(err.fileName.lastIndexOf("/") + 1) + ":" + err.lineNumber + ":1" ;
+            else if( err.stack )                        // Chrome/WebKit/Edge
+                x = log.getLineFromStack(err.stack) ;
+            else                                        // unknown filename...  (IE10 and IE11)
+                x = "@<unknown>:?:?" ;
+
+            if( log.options.prependExtras )             // prepend to log array
+                args.unshift(x) ;
+            else                                        // append to log array
+                args.push(x) ;
         }
 
-        log.history.push(args) ;      // push log arguments for later inspection
-        if( log.options.consoleLog )
-            log.console(args) ;       // and print to live console
+        if( log.options.timeStamp ) {                   // add time of logging info to log array
+            if( log.options.timeRelative )
+                x = timeStampRel() ;
+            else
+                x = timeStampAbs() ;
+
+            if( log.options.prependExtras )             // prepend to log array
+                args.unshift(x) ;
+            else                                        // append to log array
+                args.push(x) ;
+        }
+
+        if( !log.options.noHistory )
+            log.history.push(args) ;                    // push log arguments for later inspection
+        else
+            log.console(args) ;                         // print log to live console
+
+        if( log.options.consoleLog )                    // print original format of args to live console
+            console.log.apply(console, args) ;
+
     } ;
 
     log.history = [] ;                  // for maintaining a history of all logs
 
     log.info = {                        // convience for debugging and understanding
-        webview: "unknown",             // which webview are we inside?
+        webview: "unknown",             // TODO: which webview are we inside?
+        hasConsole: (function(){ return window.console && typeof console.log === "function" ;}())
     } ;
 
 
 /*
- * need to add an option to control printing to a redirected console...
+ * Options to be used by log() (not the sub-methods) to control behavior.
+ * ...need to add an option to control printing to a redirected console...
  */
     log.options = {                     // default logging options
-        timeStamp: true,                // true prepends time of log() to the logged array
-        timeRelative: false,            // true prepends relative timeStamp, else absolute timeStamp
-        lineNumber: true,               // true prepends filename, line number and column number to log array
-        consoleLog: false               // true means send to console.log() after pushing to log.history stack
+        prependExtras: true,            // true "prepends" extras elements, else "appends" to log array
+        timeStamp: true,                // true adds time of log() to the logged array
+        timeRelative: false,            // true adds relative timeStamp, else absolute timeStamp
+        lineNumber: true,               // true adds filename, line number and column number to log array
+        noHistory: false,               // true means don't push logs into history stack (print the array, instead)
+        consoleLog: false,              // true means send to console.log() after pushing to log.history stack
+        consoleLabel: "console.log:"    // label to be used with console.group() function
     } ;
 
 
@@ -143,6 +172,11 @@ function _log() {
  * - the range of log elements if two numeric args are provided, log.print(5,9)
  */
     log.print = function(start,stop) {
+        var i ;
+
+        if( typeof log.history==="undefined" || log.history===null || log.history.length<=0 )
+            return 0 ;
+
         if( start === undefined ) {         // no parameters provided, print entire history
             start = 0 ;
             stop = log.history.length ;
@@ -163,6 +197,12 @@ function _log() {
             stop = log.history.length ;
         }
 // TODO: iterate from start thru stop and call log.console() each time
+// don't forget to test for empty history array...
+
+        for( i=start; i<=stop; i++ )
+            log.console(log.history[i]) ;   // print out history per input parms
+
+        return i ;                          // return number of array elements printed to console
     } ;
 
 
@@ -173,9 +213,9 @@ function _log() {
         // only send to console if we have a usable console AND the option is enabled
         if( window.console && typeof console.log === "function" ) {
 
-            if( isIEModern ) {                              // group arguments for IE10 and IE11
-                console.group("log.console:") ;
-            }
+//            if( isIEModern ) {                              // group arguments for IE10 and IE11
+                console.group(log.options.consoleLabel) ;
+//            }
 
             if( argArray.length === 1 && typeof argArray[0] === "string" ) {    // if a single string argument
                 console.log(argArray.toString()) ;
@@ -192,9 +232,9 @@ function _log() {
                 console.log(argArray) ;
             }
 
-            if( isIEModern ) {                              // ungroup arguments for IE10 and IE11
+//            if( isIEModern ) {                              // ungroup arguments for IE10 and IE11
                 console.groupEnd() ;
-            }
+//            }
 
             return true ;
         }
